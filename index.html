@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>Bamboo Investment Intelligence Dashboard</title>
+
+<link href="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.css" rel="stylesheet"/>
+<script src="https://unpkg.com/maplibre-gl@3.6.2/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body{margin:0;font-family:Segoe UI}
+
+/* HEADER */
+.header{
+position:fixed;top:0;width:100%;height:50px;
+background:#0f4c81;color:#fff;
+display:flex;align-items:center;gap:10px;padding:10px;
+z-index:999;
+}
+.header img{height:40px}
+
+/* MAP */
+#map{
+position:absolute;
+top:60px;
+bottom:0;
+left:0;
+width:100%;
+transition:0.1s;   /* smooth resize */
+}
+
+/* PANEL */
+.panel{
+position:fixed;
+top:60px;
+right:-100%;
+width:85%;
+max-width:380px;
+height:calc(100% - 50px);
+background:#fff;
+transition:0.4s;
+overflow-y:auto;
+z-index:2000;
+padding:15px;
+box-shadow:-8px 0 25px rgba(0,0,0,0.4);
+}
+.panel.open{right:0}
+
+/* BUTTON */
+#btn{
+position:absolute;
+top:80px;
+right:15px;
+background:#0f4c81;
+color:#fff;
+width:55px;height:55px;
+border-radius:12px;
+display:flex;
+align-items:center;
+justify-content:center;
+cursor:pointer;
+z-index:2100;
+}
+
+/* HAMBURGER */
+#menuBtn{
+position:absolute;
+top:70px;     /* just below header (60px + gap) */
+left:15px;    /* move to left side */
+background:#0f4c81;
+color:#fff;
+width:50px;
+height:50px;
+border-radius:10px;
+display:flex;
+align-items:center;
+justify-content:center;
+font-size:22px;
+cursor:pointer;
+z-index:2100;
+}
+
+#menuPanel{
+position:absolute;
+top:130px;
+left:-220px;   /* hide on left */
+width:200px;
+background:#fff;
+padding:10px;
+border-radius:10px;
+box-shadow:0 4px 15px rgba(0,0,0,0.3);
+transition:0.3s;
+z-index:2100;
+}
+
+#menuPanel.open{
+left:15px;     /* show from left */
+}
+
+body.panel-open #map{
+width:calc(100% - 380px);   /* same as panel width */
+}
+
+/* KPI */
+.kpi{
+background:linear-gradient(135deg,#0f4c81,#2563eb);
+color:#fff;padding:10px;margin:6px 0;
+border-radius:10px;
+}
+
+/* LEGEND */
+#legend{
+position:absolute;
+bottom:20px;
+left:10px;
+background:#fff;
+padding:10px;
+border-radius:10px;
+box-shadow:0 4px 10px rgba(0,0,0,0.3);
+z-index:1000;
+}
+#legend span{
+display:inline-block;
+width:15px;height:15px;margin-right:5px;
+}
+/* POPUP*/
+.maplibregl-popup-content{
+font-family:Segoe UI;
+border-radius:12px;
+padding:0;
+overflow:hidden;
+width:380px;
+max-height:300px;   /* 🔥 LIMIT HEIGHT */
+}
+
+.popup-card{
+padding:10px;
+max-height:260px;   /* 🔥 scroll area */
+overflow-y:auto;
+}
+
+.popup-title{
+background:#0f4c81;
+color:#fff;
+padding:8px;
+font-weight:bold;
+text-align:center;
+}
+
+.popup-grid{
+display:grid;
+grid-template-columns:1fr 1fr 1fr; /* 🔥 3 columns */
+gap:6px;
+font-size:11px;
+}
+
+
+
+.popup-item{
+background:#f3f4f6;
+padding:6px;
+border-radius:6px;
+}
+
+.popup-section{
+margin-top:6px;
+font-weight:bold;
+color:#0f4c81;
+border-bottom:1px solid #ddd;
+}
+
+.layer-item{
+margin-bottom:12px;
+}
+
+.layer-item label{
+font-weight:600;
+display:block;
+margin-bottom:4px;
+}
+
+.layer-item input[type="range"]{
+width:100%;
+}
+
+
+</style>
+</head>
+
+<body>
+
+<div class="header">
+<img src="https://raw.githubusercontent.com/hemanya2003/Orgatek/main/Orgatek_Logo.jpeg">
+<b>Bamboo Investment Intelligence Dashboard</b>
+</div>
+
+<div id="btn">📊</div>
+<div id="menuBtn">☰</div>
+
+<div id="menuPanel">
+<h4>Layers</h4>
+
+<div class="layer-item">
+<label><input type="checkbox" checked onchange="toggleLayer('plots-3d',this)"> Plots</label>
+<input type="range" min="0" max="1" step="0.1" value="0.85"
+oninput="setOpacity('plots-3d', this.value)">
+</div>
+
+<div class="layer-item">
+<label><input type="checkbox" checked onchange="toggleLayer('roads',this)"> Roads</label>
+<input type="range" min="0" max="1" step="0.1" value="1"
+oninput="setOpacity('roads', this.value)">
+</div>
+
+<div class="layer-item">
+<label><input type="checkbox" checked onchange="toggleLayer('boundary-wall-3d',this)"> Boundary</label>
+<input type="range" min="0" max="1" step="0.1" value="0.9"
+oninput="setOpacity('boundary-wall-3d', this.value)">
+</div>
+
+<div class="layer-item">
+<label><input type="checkbox" onchange="toggleLayer('drone',this)"> Drone</label>
+<input type="range" min="0" max="1" step="0.1" value="1"
+oninput="setOpacity('drone', this.value)">
+</div>
+
+</div> <!-- ✅ VERY IMPORTANT: CLOSE PANEL -->
+
+<!-- ✅ MAP MUST BE OUTSIDE -->
+<div id="map"></div>
+
+
+
+<div class="panel" id="panel">
+
+<h3>Investment Insights</h3>
+
+<div class="kpi">Total Area: <span id="area"></span> acres</div>
+<div class="kpi">Total Investment: <span id="cost"></span></div>
+<div class="kpi">Total Revenue: <span id="rev"></span></div>
+<div class="kpi">Net Profit: <span id="profit"></span></div>
+<div class="kpi">Profit / Acre: <span id="ppa"></span></div>
+<div class="kpi">Carbon Credits: <span id="carbon"></span></div>
+
+<canvas id="yearChart"></canvas>
+<canvas id="pieChart"></canvas>
+
+</div>
+
+<div id="legend">
+<b>Profit Zones</b><br>
+<div><span style="background:#ef4444"></span> Low</div>
+<div><span style="background:#facc15"></span> Medium</div>
+<div><span style="background:#22c55e"></span> High</div>
+</div>
+
+<script>
+
+const map = new maplibregl.Map({
+container:'map',
+style:'https://api.maptiler.com/maps/satellite/style.json?key=6TYA91HhQPjMXU651wBM',
+center:[86.603,21.798],
+zoom:16,
+pitch:60,     // 🔥 tilt
+bearing:-20   // 🔥 angle
+});
+
+const popup = new maplibregl.Popup({
+closeButton:true,
+closeOnClick:false
+});
+
+function formatLakh(num){
+if(!num) return "₹0";
+return "₹" + (num/100000).toFixed(2) + " L";
+}
+
+map.on('load', async()=>{
+
+// ================= 1️⃣ FETCH =================
+const plots = await fetch("https://raw.githubusercontent.com/hemanya2003/Orgatek/main/Plotboundary_Sirishchandrapur.geojson").then(r=>r.json());
+const roads = await fetch("https://raw.githubusercontent.com/hemanya2003/Orgatek/main/Roads.geojson").then(r=>r.json());
+const boundaryWall = await fetch("https://raw.githubusercontent.com/hemanya2003/Orgatek/main/Boundary_wall.geojson").then(r=>r.json());
+
+// ================= 2️⃣ MODIFY =================
+plots.features.forEach((f,i)=>{
+  f.properties.plot_id = i;
+});
+
+// ================= 3️⃣ SOURCES =================
+map.addSource('plots',{type:'geojson',data:plots});
+map.addSource('roads',{type:'geojson',data:roads});
+map.addSource('boundary-wall',{type:'geojson',data:boundaryWall});
+map.addSource('drone',{
+  type:'raster',
+  tiles:[
+    'https://api.maptiler.com/tiles/019d7b09-68a8-7eb4-afe7-b26910537586/{z}/{x}/{y}.webp?key=E6ZRsLot4eQsQImxowwm'
+  ],
+  tileSize:256
+});
+
+// ================= 4️⃣ LAYERS =================
+
+// drone
+map.addLayer({
+id:'drone',
+type:'raster',
+source:'drone',
+layout:{visibility:'none'}
+});
+
+map.addLayer({
+id:'plots-3d',
+type:'fill-extrusion',
+source:'plots',
+paint:{
+'fill-extrusion-color':[
+'interpolate',['linear'],['get','Net_Profit'],
+0,'#ef4444',
+200000,'#facc15',
+1000000,'#22c55e'
+],
+
+'fill-extrusion-height':[
+'interpolate',['linear'],['get','Net_Profit'],
+0,4,          // very low profit → small height
+200000,5,     // medium
+1000000,10    // high profit → slightly taller
+],
+
+'fill-extrusion-base':0,
+'fill-extrusion-opacity':0.85
+}
+});
+
+// boundary
+map.addLayer({
+id:'boundary-wall-3d',
+type:'fill-extrusion',
+source:'boundary-wall',
+paint:{
+'fill-extrusion-color':'gray',
+'fill-extrusion-height':15,
+'fill-extrusion-opacity':0.9
+}
+});
+
+// roads
+map.addLayer({
+id:'roads',
+type:'fill-extrusion',
+source:'roads',
+paint:{
+'fill-extrusion-color':[
+'match',['get','LAYER'],
+'MAIN ROAD','#444',
+'INTER ROAD','#888',
+'#999'
+],
+'fill-extrusion-height':1.5,
+'fill-extrusion-opacity':1
+}
+});
+
+// 🔥 HIGHLIGHT MUST BE LAST
+map.addLayer({
+id:'highlight-fill',
+type:'fill-extrusion',
+source:'plots',
+paint:{
+'fill-extrusion-color':'#00ffff',
+'fill-extrusion-height':20,
+'fill-extrusion-opacity':0.9
+},
+filter:['==','plot_id',-1]
+});
+
+// keep on top
+map.moveLayer('highlight-fill');
+
+
+
+// ================= 5️⃣ EVENTS =================
+map.on('click','plots-3d',(e)=>{
+
+const f = e.features[0];
+if(!f) return;
+
+const p = f.properties;
+
+// highlight
+map.setFilter('highlight-fill',['==','plot_id',Number(p.plot_id)]);
+
+// update panel
+updatePanel(p);
+
+// 📊 POPUP HTML (ALL DATA)
+const html = `
+<div class="popup-title">Plot ${p.PLOT_NO}</div>
+
+<div class="popup-card">
+
+<div class="popup-section">Overview</div>
+<div class="popup-grid">
+<div class="popup-item">Area<br><b>${p.AREA} ac</b></div>
+<div class="popup-item">Species<br><b>${p.Species}</b></div>
+<div class="popup-item">Plants<br><b>${p.Tot_Plant}</b></div>
+
+<div class="popup-item">Biomass<br><b>${p.Tot_Bio}</b></div>
+<div class="popup-item">Carbon<br><b>${p.Carbon} t</b></div>
+</div>
+
+<div class="popup-section">Financial</div>
+<div class="popup-grid">
+<div class="popup-item">Cost<br><b>${formatLakh(p.Total_Cost)}</b></div>
+<div class="popup-item">Revenue<br><b>${formatLakh(p.Total_Reve)}</b></div>
+<div class="popup-item">Profit<br><b>${formatLakh(p.Net_Profit)}</b></div>
+</div>
+
+<div class="popup-section">Income</div>
+<div class="popup-grid">
+<div class="popup-item">Y1<br><b>${formatLakh(p.Inc_Y1)}</b></div>
+<div class="popup-item">Y2<br><b>${formatLakh(p.Inc_Y2)}</b></div>
+<div class="popup-item">Y3<br><b>${formatLakh(p.Inc_Y3)}</b></div>
+
+<div class="popup-item">Y4<br><b>${formatLakh(p.Inc_Y4)}</b></div>
+<div class="popup-item">Y5<br><b>${formatLakh(p.Inc_Y5)}</b></div>
+<div class="popup-item">Y6<br><b>${formatLakh(p.Inc_Y6)}</b></div>
+
+<div class="popup-item">Y7-15<br><b>${formatLakh(p.Inc_Y7_15)}</b></div>
+</div>
+
+</div>
+`;
+// show popup
+popup
+.setLngLat(e.lngLat)
+.setHTML(html)
+.addTo(map);
+
+});
+
+
+
+
+
+
+
+
+document.addEventListener('keydown', (e)=>{
+if(e.key === "Escape"){
+
+// 🔹 remove highlight
+map.setFilter('highlight-fill',['==','plot_id',-1]);
+
+// 🔹 reset panel
+updateTotalDashboard(plots);
+
+// 🔹 close popup
+if(popup){
+popup.remove();
+}
+
+}
+});
+
+function updateTotalDashboard(plots){
+
+let totalArea = 0;
+let totalCost = 0;
+let totalRevenue = 0;
+let totalProfit = 0;
+let totalCarbon = 0;
+
+// year totals
+let y1=0,y2=0,y3=0,y4=0,y5=0,y6=0,y7=0;
+
+plots.features.forEach(f=>{
+const p = f.properties;
+
+totalArea += Number(p.AREA || 0);
+totalCost += Number(p.Total_Cost || 0);
+totalRevenue += Number(p.Total_Reve || 0);
+totalProfit += Number(p.Net_Profit || 0);
+totalCarbon += Number(p.Carbon || 0);
+
+y1 += Number(p.Inc_Y1 || 0);
+y2 += Number(p.Inc_Y2 || 0);
+y3 += Number(p.Inc_Y3 || 0);
+y4 += Number(p.Inc_Y4 || 0);
+y5 += Number(p.Inc_Y5 || 0);
+y6 += Number(p.Inc_Y6 || 0);
+y7 += Number(p.Inc_Y7_15 || 0);
+
+});
+
+
+
+const fnum=n=>'₹'+Math.round(n).toLocaleString('en-IN');
+
+// update panel
+document.getElementById('area').innerText=totalArea.toFixed(2);
+document.getElementById('cost').innerText=fnum(totalCost);
+document.getElementById('rev').innerText=fnum(totalRevenue);
+document.getElementById('profit').innerText=fnum(totalProfit);
+document.getElementById('ppa').innerText=fnum(totalProfit/(totalArea||1));
+document.getElementById('carbon').innerText=totalCarbon.toFixed(2)+" tons";
+
+// chart
+if(window.chart) window.chart.destroy();
+
+window.chart=new Chart(document.getElementById('yearChart'),{
+type:'line',
+data:{
+labels:['Y1','Y2','Y3','Y4','Y5','Y6','Y7-15'],
+datasets:[{
+label:'Total Income',
+data:[y1,y2,y3,y4,y5,y6,y7]
+}]
+}
+});
+
+}
+
+function updatePanel(p){
+
+const fnum=n=>'₹'+Math.round(n).toLocaleString('en-IN');
+
+document.getElementById('area').innerText=Number(p.AREA||0).toFixed(2);
+document.getElementById('cost').innerText=fnum(p.Total_Cost||0);
+document.getElementById('rev').innerText=fnum(p.Total_Reve||0);
+document.getElementById('profit').innerText=fnum(p.Net_Profit||0);
+document.getElementById('ppa').innerText=fnum((p.Net_Profit||0)/(p.AREA||1));
+document.getElementById('carbon').innerText=(p.Carbon||0).toFixed(2)+" tons";
+
+// chart
+if(window.chart) window.chart.destroy();
+
+window.chart=new Chart(document.getElementById('yearChart'),{
+type:'line',
+data:{
+labels:['Y1','Y2','Y3','Y4','Y5','Y6','Y7-15'],
+datasets:[{
+label:'Plot Income',
+data:[
+p.Inc_Y1,p.Inc_Y2,p.Inc_Y3,p.Inc_Y4,
+p.Inc_Y5,p.Inc_Y6,p.Inc_Y7_15
+]
+}]
+}
+});
+
+}
+
+updateTotalDashboard(plots);
+
+
+
+map.on('mouseenter', 'plots-3d', () => {
+map.getCanvas().style.cursor = 'pointer';
+});
+
+map.on('mouseleave', 'plots-3d', () => {
+map.getCanvas().style.cursor = '';
+});
+});
+
+
+
+
+
+
+
+// UI
+document.getElementById('btn').onclick=()=>{
+const panel = document.getElementById('panel');
+panel.classList.toggle('open');
+
+// 🔥 add/remove body class
+document.body.classList.toggle('panel-open');
+};
+
+document.getElementById('menuBtn').onclick=()=>{
+document.getElementById('menuPanel').classList.toggle('open');
+};
+
+// layer toggle
+function toggleLayer(layer,cb){
+map.setLayoutProperty(layer,'visibility',cb.checked?'visible':'none');
+}
+
+function setOpacity(layer, value){
+
+value = Number(value);
+
+// plots
+if(layer === 'plots-3d'){
+map.setPaintProperty(layer,'fill-extrusion-opacity',value);
+}
+
+// roads
+if(layer === 'roads'){
+map.setPaintProperty(layer,'fill-extrusion-opacity',value);
+}
+
+// boundary
+if(layer === 'boundary-wall-3d'){
+map.setPaintProperty(layer,'fill-extrusion-opacity',value);
+}
+
+// drone
+if(layer === 'drone'){
+map.setPaintProperty(layer,'raster-opacity',value);
+}
+
+}
+
+</script>
+
+</body>
+</html>
